@@ -1,3 +1,5 @@
+[![Docker Image Build](https://github.com/somik123/python-web-capture/actions/workflows/main.yaml/badge.svg)](https://github.com/somik123/python-web-capture/actions/workflows/main.yaml)
+
 # python-web-capture
 Python script with playwright, all packaged into a docker container with port 8080 open for requests.
 

@@ -19,61 +19,106 @@ def takeScreenshot(url, save_file, full):
 
 
 class MyServer(BaseHTTPRequestHandler):
-    def do_GET(self):
-        url = ""
-        full = False
-        refresh = False
-        try:
-            # Parse the url into queries
-            query = {}
-            parsed_path = urlparse(self.path)
-            index = self.path.index('?') + 1
-            query_parse = parse_qsl(self.path[index:], keep_blank_values=True)
-            print(query_parse)
-            for x in query_parse:
-                query[x[0]] = x[1]
-            print(query)
 
-            # validate the url and query parameters
-            tmp_url = unquote( query["url"] )
-            if "full" in query.keys():
-                full = True
-            if "refresh" in query.keys():
-                refresh = True
-            parsed_url = urlparse(tmp_url)
-            if validators.url(tmp_url) and parsed_url.scheme == "https" :
-                if len(secret) > 0 and secret == query["secret"]:
-                    url = tmp_url
-        except:
-           print("Exception validator")
-
-        # Data OK
+    def error_responder(self, error_msg):
+        msg_json = json.dumps(error_msg)
+        print(msg_json)
         self.send_response(200)
-        if len(url) > 10:
-            # If image is cached, get from there instead
-            file_name = "screenshot.png"
-            if cache.lower() == "yes" :
-                file_name = hashlib.sha256(url.encode()).hexdigest() + ".png"
-            save_file = save_dir + "/" + file_name
-            try:
-                # If image is not cached, cache it (if enabled)
-                if refresh or not os.path.exists(save_file):
-                    takeScreenshot(url, save_file, full)
-
-                # Start returning image
-                with open(save_file, "rb") as image_file:
-                    self.send_header('Content-Type', 'image/png')
-                    self.end_headers()
-                    self.wfile.write(image_file.read())
-            except:
-                self.send_header('Content-Type', 'text/plain')
-                self.end_headers()
-                self.wfile.write("ERROR".encode('utf-8'))
-        else:
-            self.send_header('Content-Type', 'text/plain')
-            self.end_headers()
-            self.wfile.write("ERROR".encode('utf-8'))
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(msg_json.encode('utf-8'))
         return
+
+    def do_GET(self):
+        if self.path == '/favicon.ico':
+            with open("favicon.ico", "rb") as favicon_file:
+                self.send_response(200)
+                self.send_header('Content-Type', 'image/x-icon')
+                self.end_headers()
+                self.wfile.write(favicon_file.read())
+                return
+            print("")
+            return
+        else:
+            error_msg = {
+                "status": "ERROR",
+                "request": self.path,
+                "url": "",
+                "msg": "",
+            }
+
+            url = ""
+            full = False
+            refresh = False
+            
+            try:
+                # Parse the url into queries
+                query = {}
+                parsed_path = urlparse(self.path)
+                index = self.path.index('?') + 1
+                query_parse = parse_qsl(self.path[index:], keep_blank_values=True)
+                for x in query_parse:
+                    query[x[0]] = x[1]
+                print(query)
+
+                # Only process if secret matches query
+                if len(secret) == 0 or ("secret" in query.keys() and secret == query["secret"]):
+                    # Process queries
+                    if "full" in query.keys():
+                        full = True
+                    if "refresh" in query.keys():
+                        refresh = True
+
+                    # validate the url
+                    url = unquote( query["url"] )
+                    parsed_url = urlparse(url)
+
+                    if validators.url(url) and parsed_url.scheme == "https" :
+                        error_msg["url"] = url
+
+                        try:
+                            # If image is cached, get from there instead
+                            file_name = "screenshot.png"
+                            if cache != "no" :
+                                file_name = hashlib.sha256(url.encode()).hexdigest() + ".png"
+                            save_file = save_dir + "/" + file_name
+                            # If image is not cached, cache it (if enabled)
+                            if refresh or cache == "no" or not os.path.exists(save_file):
+                                print("Taking screenshot...")
+                                takeScreenshot(url, save_file, full)
+                                print("Saved to: " + save_file)
+                            else:
+                                print("Using cached: " + save_file)
+                            # Start returning image
+                            with open(save_file, "rb") as image_file:
+                                self.send_response(200)
+                                self.send_header('Content-Type', 'image/png')
+                                self.end_headers()
+                                self.wfile.write(image_file.read())
+                                return
+                        # Error processing screenshot
+                        except:
+                            error_msg["msg"] = "Error processing screenshot."
+                            self.error_responder(error_msg)
+                            return
+                    
+                    # URL validation failed
+                    else:
+                        error_msg["msg"] = "URL failed validation."
+                        self.error_responder(error_msg)
+                        return
+
+                # Secret set but not matched
+                else:
+                    error_msg["msg"] = "Secret key is set and did not match request"
+                    self.error_responder(error_msg)
+                    return
+
+            # Error parsing request or url
+            except:
+                error_msg["msg"] = "Error parsing request."
+                self.error_responder(error_msg)
+                return
 
 
 if __name__ == "__main__":
