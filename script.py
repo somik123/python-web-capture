@@ -1,7 +1,7 @@
 from playwright.sync_api import sync_playwright
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, unquote, parse_qsl
-import json, argparse, subprocess, validators, os, hashlib
+import json, argparse, subprocess, validators, os, hashlib, time
 
 # get env vars
 secret = os.environ.get("PYCAPTURE_SECRET", "")
@@ -9,11 +9,15 @@ save_dir = os.environ.get("PYCAPTURE_DATA", "/tmp")
 cache = os.environ.get("PYCAPTURE_CACHE", "no")
 
 # Use playwright to capture a screenshot of the page
-def takeScreenshot(url, save_file, full):
+def takeScreenshot(url: str, save_file: str, width: int, height: int, full: bool, delay: int):
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         page = browser.new_page()
+        page.set_viewport_size({"width": width, "height": height})
         page.goto(url)
+        if delay > 0:
+            print("Sleeping for {}s".format(delay))
+            time.sleep(delay)
         page.screenshot(path=save_file, full_page=full)
         browser.close()
 
@@ -50,6 +54,9 @@ class MyServer(BaseHTTPRequestHandler):
             url = ""
             full = False
             refresh = False
+            width = 1280
+            height = 960
+            delay = 0
             
             try:
                 # Parse the url into queries
@@ -68,6 +75,18 @@ class MyServer(BaseHTTPRequestHandler):
                         full = True
                     if "refresh" in query.keys():
                         refresh = True
+                    if "width" in query.keys():
+                        tmp_width = int(query["width"])
+                        if tmp_width > 100 and tmp_width < 4096:
+                            width = tmp_width
+                    if "height" in query.keys():
+                        tmp_height = int(query["height"])
+                        if tmp_height > 100 and tmp_height < 4096:
+                            height = tmp_height
+                    if "delay" in query.keys():
+                        tmp_delay = int(query["delay"])
+                        if tmp_delay > 0 and tmp_delay < 10:
+                            delay = tmp_delay
 
                     # validate the url
                     url = unquote( query["url"] )
@@ -85,7 +104,7 @@ class MyServer(BaseHTTPRequestHandler):
                             # If image is not cached, cache it (if enabled)
                             if refresh or cache == "no" or not os.path.exists(save_file):
                                 print("Taking screenshot...")
-                                takeScreenshot(url, save_file, full)
+                                takeScreenshot(url, save_file, width, height, full, delay)
                                 print("Saved to: " + save_file)
                             else:
                                 print("Using cached: " + save_file)
