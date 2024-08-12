@@ -4,9 +4,12 @@ from urllib.parse import urlparse, unquote, parse_qsl
 import json, argparse, subprocess, validators, os, hashlib, time
 
 # get env vars
+username = os.environ.get("PYCAPTURE_USER", "")
+password = os.environ.get("PYCAPTURE_PASS", "")
 secret = os.environ.get("PYCAPTURE_SECRET", "")
 save_dir = os.environ.get("PYCAPTURE_DATA", "/tmp")
 cache = os.environ.get("PYCAPTURE_CACHE", "no")
+
 
 # Use playwright to capture a screenshot of the page
 def takeScreenshot(url: str, save_file: str, width: int, height: int, full: bool, delay: int):
@@ -43,6 +46,21 @@ class MyServer(BaseHTTPRequestHandler):
                 return
             print("")
             return
+        if self.path == '/':
+            if len(username) != 0 or len(password) != 0:
+                output_html = home_page_html.format(user_pass_prompt_html)
+            elif len(secret) != 0:
+                output_html = home_page_html.format(secret_prompt_html)
+            else:
+                output_html = home_page_html.format("")
+            
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+            self.wfile.write(output_html.encode('utf-8'))
+            return
+            print("")
+            return
         else:
             error_msg = {
                 "status": "ERROR",
@@ -69,7 +87,12 @@ class MyServer(BaseHTTPRequestHandler):
                 print(query)
 
                 # Only process if secret matches query
-                if len(secret) == 0 or ("secret" in query.keys() and secret == query["secret"]):
+                secret_valid = "secret" in query.keys() and secret == query["secret"]
+                user_valid = "user" in query.keys() and username == query["user"]
+                pass_valid = "pass" in query.keys() and password == query["pass"]
+                auth_disabled = len(secret) == 0 and len(username) == 0 and len(password) == 0
+
+                if auth_disabled or secret_valid or (user_valid and pass_valid):
                     # Process queries
                     if "full" in query.keys():
                         full = True
@@ -99,17 +122,18 @@ class MyServer(BaseHTTPRequestHandler):
                             # If image is cached, get from there instead
                             file_name = "screenshot.png"
                             if cache != "no" :
-                                file_name = hashlib.sha256(url.encode()).hexdigest() + ".png"
-                            save_file = save_dir + "/" + file_name
+                                screenshot_params = "{} {} {} {} {}".format(width, height, full, delay, url)
+                                file_name = hashlib.sha256(screenshot_params.encode()).hexdigest() + ".png"
+                            file_path = save_dir + "/" + file_name
                             # If image is not cached, cache it (if enabled)
-                            if refresh or cache == "no" or not os.path.exists(save_file):
+                            if refresh or cache == "no" or not os.path.exists(file_path):
                                 print("Taking screenshot...")
-                                takeScreenshot(url, save_file, width, height, full, delay)
-                                print("Saved to: " + save_file)
+                                takeScreenshot(url, file_path, width, height, full, delay)
+                                print("Saved to: " + file_path)
                             else:
-                                print("Using cached: " + save_file)
+                                print("Using cached: " + file_path)
                             # Start returning image
-                            with open(save_file, "rb") as image_file:
+                            with open(file_path, "rb") as image_file:
                                 self.send_response(200)
                                 self.send_header('Content-Type', 'image/png')
                                 self.end_headers()
@@ -129,7 +153,7 @@ class MyServer(BaseHTTPRequestHandler):
 
                 # Secret set but not matched
                 else:
-                    error_msg["msg"] = "Secret key is set and did not match request"
+                    error_msg["msg"] = "Secret key or username/password is set and did not match"
                     self.error_responder(error_msg)
                     return
 
@@ -139,6 +163,80 @@ class MyServer(BaseHTTPRequestHandler):
                 self.error_responder(error_msg)
                 return
 
+secret_prompt_html = """
+                <div class="input-group mb-3">
+                    <span class="input-group-text">Secret:</span>
+                    <input class="form-control form-control-lg" type="text" name="secret" value="" />
+                </div>
+"""
+user_pass_prompt_html = """
+                <div class="input-group mb-3">
+                    <span class="input-group-text">Username:</span>
+                    <input class="form-control form-control-lg" type="text" name="user" value="" />
+                    <span class="input-group-text">Password:</span>
+                    <input class="form-control form-control-lg" type="text" name="pass" value="" />
+                </div>
+"""
+
+home_page_html = """
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+</head>
+
+<body>
+    <form action="/">
+        <div style="width: 700px; margin: 0 auto;">
+            <div class="m-5">
+
+                <div class="input-group mb-3">
+                    <span class="input-group-text">URL:</span>
+                    <input class="form-control form-control-lg" type="text" name="url" value="" />
+                </div>
+{}
+                <div class="input-group mb-3">
+                    <span class="input-group-text">Width:</span>
+                    <input class="form-control form-control-lg" type="text" name="width" value="1280" />
+                    <span class="input-group-text">Height:</span>
+                    <input class="form-control form-control-lg" type="text" name="height" value="960" />
+                </div>
+                
+                <div class="input-group mb-3">
+                    <span class="input-group-text">Full page:</span>
+                    <div class="input-group-text">
+                        <input class="form-check-input" type="checkbox" name="full" value="1">
+                    </div>
+                    <span class="input-group-text">Refresh:</span>
+                    <div class="input-group-text">
+                        <input class="form-check-input" type="checkbox" name="refresh" value="1">
+                    </div>
+                    <span class="input-group-text">Delay:</span>
+                    <select class="form-select" name="delay">
+                        <option>0</option>
+                        <option>1</option>
+                        <option>2</option>
+                        <option>3</option>
+                        <option>4</option>
+                        <option>5</option>
+                        <option>6</option>
+                        <option>7</option>
+                        <option>8</option>
+                        <option>9</option>
+                        <option>10</option>
+                    </select>
+                    <input class="form-control form-control-lg btn btn-outline-primary" type="submit" value="Screenshot" />
+                </div>
+
+            </div>
+        </div>
+    </form>
+</body>
+
+</html>
+"""
 
 if __name__ == "__main__":
 
