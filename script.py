@@ -43,6 +43,14 @@ class MyServer(BaseHTTPRequestHandler):
                 return
             print("")
             return
+        if self.path == '/':
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+            self.wfile.write(home_page.encode('utf-8'))
+            return
+            print("")
+            return
         else:
             error_msg = {
                 "status": "ERROR",
@@ -139,6 +147,67 @@ class MyServer(BaseHTTPRequestHandler):
                 self.error_responder(error_msg)
                 return
 
+home_page = """
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+</head>
+
+<body>
+    <form action="/">
+        <div style="width: 700px; margin: 0 auto;">
+            <div class="m-5">
+
+                <div class="input-group mb-3">
+                    <span class="input-group-text">URL:</span>
+                    <input class="form-control form-control-lg" type="text" name="url" value="" />
+                </div>
+
+                <div class="input-group mb-3">
+                    <span class="input-group-text">Secret:</span>
+                    <input class="form-control form-control-lg" type="text" name="secret" value="" />
+                    <span class="input-group-text">Width:</span>
+                    <input class="form-control form-control-lg" type="text" name="width" value="1280" />
+                    <span class="input-group-text">Height:</span>
+                    <input class="form-control form-control-lg" type="text" name="height" value="960" />
+                </div>
+                
+                <div class="input-group mb-3">
+                    <span class="input-group-text">Full page:</span>
+                    <div class="input-group-text">
+                        <input class="form-check-input" type="checkbox" name="full" value="1">
+                    </div>
+                    <span class="input-group-text">Refresh:</span>
+                    <div class="input-group-text">
+                        <input class="form-check-input" type="checkbox" name="refresh" value="1">
+                    </div>
+                    <span class="input-group-text">Delay:</span>
+                    <select class="form-select" name="delay">
+                        <option>0</option>
+                        <option>1</option>
+                        <option>2</option>
+                        <option>3</option>
+                        <option>4</option>
+                        <option>5</option>
+                        <option>6</option>
+                        <option>7</option>
+                        <option>8</option>
+                        <option>9</option>
+                        <option>10</option>
+                    </select>
+                    <input class="form-control form-control-lg btn btn-outline-primary" type="submit" value="Screenshot" />
+                </div>
+
+            </div>
+        </div>
+    </form>
+</body>
+
+</html>
+"""
 
 if __name__ == "__main__":
 
