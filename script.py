@@ -4,9 +4,12 @@ from urllib.parse import urlparse, unquote, parse_qsl
 import json, argparse, subprocess, validators, os, hashlib, time
 
 # get env vars
+username = os.environ.get("PYCAPTURE_USER", "")
+password = os.environ.get("PYCAPTURE_PASS", "")
 secret = os.environ.get("PYCAPTURE_SECRET", "")
 save_dir = os.environ.get("PYCAPTURE_DATA", "/tmp")
 cache = os.environ.get("PYCAPTURE_CACHE", "no")
+
 
 # Use playwright to capture a screenshot of the page
 def takeScreenshot(url: str, save_file: str, width: int, height: int, full: bool, delay: int):
@@ -44,10 +47,17 @@ class MyServer(BaseHTTPRequestHandler):
             print("")
             return
         if self.path == '/':
+            if len(username) != 0 or len(password) != 0:
+                output_html = home_page_html.format(user_pass_prompt_html)
+            elif len(secret) != 0:
+                output_html = home_page_html.format(secret_prompt_html)
+            else:
+                output_html = home_page_html.format("")
+            
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
-            self.wfile.write(home_page.encode('utf-8'))
+            self.wfile.write(output_html.encode('utf-8'))
             return
             print("")
             return
@@ -77,7 +87,12 @@ class MyServer(BaseHTTPRequestHandler):
                 print(query)
 
                 # Only process if secret matches query
-                if len(secret) == 0 or ("secret" in query.keys() and secret == query["secret"]):
+                secret_valid = "secret" in query.keys() and secret == query["secret"]
+                user_valid = "user" in query.keys() and username == query["user"]
+                pass_valid = "pass" in query.keys() and password == query["pass"]
+                auth_disabled = len(secret) == 0 and len(username) == 0 and len(password) == 0
+
+                if auth_disabled or secret_valid or (user_valid and pass_valid):
                     # Process queries
                     if "full" in query.keys():
                         full = True
@@ -107,17 +122,18 @@ class MyServer(BaseHTTPRequestHandler):
                             # If image is cached, get from there instead
                             file_name = "screenshot.png"
                             if cache != "no" :
-                                file_name = hashlib.sha256(url.encode()).hexdigest() + ".png"
-                            save_file = save_dir + "/" + file_name
+                                screenshot_params = "{} {} {} {} {}".format(width, height, full, delay, url)
+                                file_name = hashlib.sha256(screenshot_params.encode()).hexdigest() + ".png"
+                            file_path = save_dir + "/" + file_name
                             # If image is not cached, cache it (if enabled)
-                            if refresh or cache == "no" or not os.path.exists(save_file):
+                            if refresh or cache == "no" or not os.path.exists(file_path):
                                 print("Taking screenshot...")
-                                takeScreenshot(url, save_file, width, height, full, delay)
-                                print("Saved to: " + save_file)
+                                takeScreenshot(url, file_path, width, height, full, delay)
+                                print("Saved to: " + file_path)
                             else:
-                                print("Using cached: " + save_file)
+                                print("Using cached: " + file_path)
                             # Start returning image
-                            with open(save_file, "rb") as image_file:
+                            with open(file_path, "rb") as image_file:
                                 self.send_response(200)
                                 self.send_header('Content-Type', 'image/png')
                                 self.end_headers()
@@ -137,7 +153,7 @@ class MyServer(BaseHTTPRequestHandler):
 
                 # Secret set but not matched
                 else:
-                    error_msg["msg"] = "Secret key is set and did not match request"
+                    error_msg["msg"] = "Secret key or username/password is set and did not match"
                     self.error_responder(error_msg)
                     return
 
@@ -147,7 +163,22 @@ class MyServer(BaseHTTPRequestHandler):
                 self.error_responder(error_msg)
                 return
 
-home_page = """
+secret_prompt_html = """
+                <div class="input-group mb-3">
+                    <span class="input-group-text">Secret:</span>
+                    <input class="form-control form-control-lg" type="text" name="secret" value="" />
+                </div>
+"""
+user_pass_prompt_html = """
+                <div class="input-group mb-3">
+                    <span class="input-group-text">Username:</span>
+                    <input class="form-control form-control-lg" type="text" name="user" value="" />
+                    <span class="input-group-text">Password:</span>
+                    <input class="form-control form-control-lg" type="text" name="pass" value="" />
+                </div>
+"""
+
+home_page_html = """
 <!DOCTYPE html>
 <html>
 
@@ -165,10 +196,8 @@ home_page = """
                     <span class="input-group-text">URL:</span>
                     <input class="form-control form-control-lg" type="text" name="url" value="" />
                 </div>
-
+{}
                 <div class="input-group mb-3">
-                    <span class="input-group-text">Secret:</span>
-                    <input class="form-control form-control-lg" type="text" name="secret" value="" />
                     <span class="input-group-text">Width:</span>
                     <input class="form-control form-control-lg" type="text" name="width" value="1280" />
                     <span class="input-group-text">Height:</span>
