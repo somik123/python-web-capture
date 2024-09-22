@@ -7,6 +7,11 @@ Able to cache images for faster retrieval as well as specify screenshot size, fu
 
 Can protect the script with username/password and/or secret key.
 
+Supports API calls. Also has a UI for calling API with parameters.
+
+### Screenshot of UI:
+<img src="https://raw.githubusercontent.com/somik123/python-web-capture/c2c8872148e46848c3486739a88cd379372435b7/screenshot.png" alt="screenshot" />
+
 ### Installation:
 Pull and deploy the image on your localhost's port `80` with the following `docker-compose.yaml` example:
 ```
